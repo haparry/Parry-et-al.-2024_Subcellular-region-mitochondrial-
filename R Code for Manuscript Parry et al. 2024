@@ -1,0 +1,2155 @@
+# R code for Parry et al. 2024_Impact of Capillary and Sarcolemmal Proximity on Mitochondrial Structure and Energetic Function in Skeletal Muscle
+
+#************************************************************************
+# Title: Impact of Capillary and Sarcolemmal Proximity on Mitochondrial Structure and Energetic Function in Skeletal Muscle
+# Author:  KAG & HAP
+# Description: Analyze different types of mitochondrial pools for function and 
+#                 morphologic differences
+# Created: May 11, 2022
+# R version: R version 3.6.1 
+# Project(working) directory: 
+#************************************************************************
+
+# packages
+
+library(knitr)
+library(psych)
+library(car)
+library(effects)
+library(emmeans)
+library(lme4)
+library(parameters)
+library(ggplot2)
+library(texreg)
+library(arm)
+library(performance)
+library(ztable)
+library(readxl)
+library(interactions)
+library(nlme)
+library(tidymodels)
+library(broom)
+library(cowplot)
+library(ggpubr)
+library(ggpp)
+library(ggbreak)
+library(ggsignif)
+library(ggthemes)
+library(scales)
+library(dplyr)
+library(Hmisc)
+library(gg.gap)
+library(modelr)
+library(drc)
+library(ggtext)
+library(plyr)
+library(writexl)
+
+
+
+####################Accuracy of selecting pools########################
+MorphologicAccuracy <- readxl::read_excel("C:/Users/parryha/Desktop/Subcellular measurements/Final Analysis_Kevin/Morphology_New_Analysis.xlsx",
+                                          sheet = "Accuracy", col_types="numeric")
+View(MorphologicAccuracy)
+
+## Clean data
+
+MorphologicAccuracy <- within(MorphologicAccuracy, {
+  Cell = as.factor(Cell)
+  Accuracy = as.numeric(Accuracy)
+  FalsePositive = as.numeric(FalsePositive)
+  Method = factor(Method, labels = c("Max Myosin", "40 nm SL"))
+})
+
+
+
+AccuracyCell <- ggplot(data = MorphologicAccuracy, aes(x=Method, y=Accuracy))+
+  geom_jitter(aes(shape = Cell, fill = Method), width=0.05, height = 0.05, size = 10)+
+  #geom_bar(stat = "identity", color = "black", width = 0.5) +
+  #geom_text(aes(label=round(Accuracy, 2)), vjust=1.6, color = "white", size=10) +
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 55, hjust = 0.5),
+    legend.position = "none",
+    text = element_text(size = 45, color="black"),
+    axis.title.x=element_blank(),
+    axis.text.x=element_text(size=45, face="bold"),
+    axis.text.y=element_text(size=45)) +
+  labs(title = "Correct PVM Prediction", y = expression(paste("Accuracy (%)"))) +
+  theme(panel.spacing.x = unit(0, "lines")) + 
+  ggplot2::scale_shape_manual(values=c(22,21,24,22,21,24,4,5,6))+
+  ggplot2::scale_fill_manual(values=c("orange2", "royalblue2")) +
+  ylim(0,100)
+
+AccuracyCell +
+  stat_summary(aes(x=Method, y=Accuracy), 
+               data = MorphologicAccuracy, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='pointrange', 
+               size=1,
+               linewidth = 1.25,
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill="white")  
+
+
+FalsePositiveCell <- ggplot(data = MorphologicAccuracy, aes(x=Method, y=FalsePositive))+
+  geom_jitter(aes(shape = Cell, fill = Method), width=0.05, height = 0.05, size = 10)+
+  #geom_bar(stat = "identity", color = "black", width = 0.5) +
+  #geom_text(aes(label=round(FalsePositive, 2)), vjust=1.6, color = "white", size=10) +
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 55, hjust = 0.5),
+    legend.position = "none",
+    text = element_text(size = 45, color="black"),
+    axis.title.x=element_blank(),
+    axis.text.x=element_text(size=45, face="bold"),
+    axis.text.y=element_text(size=45)) +
+  labs(title = "Wrongly selected mitochondria", y = expression(paste("False Positive (%)"))) +
+  theme(panel.spacing.x = unit(0, "lines")) + 
+  ggplot2::scale_shape_manual(values=c(22,21,24,22,21,24,4,5,6))+
+  ggplot2::scale_fill_manual(values=c("orange2", "royalblue2")) +
+  ylim(0,50)
+
+FalsePositiveCell +
+  stat_summary(aes(x=Method, y=FalsePositive), 
+               data = MorphologicAccuracy, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='pointrange', 
+               size=1,
+               linewidth = 1.25,
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill="white")  
+
+
+###################### Morphologic Data ######################
+
+## Load Data Morphologic 
+
+Morphologic <- readxl::read_excel("C:/Users/parryha/Desktop/Subcellular measurements/Final Analysis_Kevin/Morphology_New_Analysis.xlsx",
+                                  sheet = "HP All Fibers", col_types="numeric")
+View(Morphologic)
+
+Morphologic <- Morphology_New_Analysis
+
+## Clean data
+
+Morphologic <- within(Morphologic, {
+  Volume = as.numeric(Volume)
+  SurfaceArea = as.numeric(SurfaceArea)
+  Sphericity = as.numeric(Sphericity)
+  Cell_Name = as.factor(Cell_Name)
+  Cell_Number = as.factor(Cell_Number)
+  Fiber_Type = factor(Fiber_Type, labels = c("Glycolytic", "Oxidative"))
+  LipidConnected = as.numeric(LipidConnected)
+  SRConnected = as.numeric(SRConnected)
+  SarcolemmaConnected = as.numeric(SarcolemmaConnected)
+  MitoConnected = as.numeric(MitoConnected)
+  MyosinConnected = as.numeric(MyosinConnected)
+  SA2Vol = as.numeric(c(SurfaceArea/Volume))
+  EllElon = as.numeric(EllElon)
+  EllFlatness = as.numeric(EllFlatness)
+  AspectRatio = as.numeric(c(EllElon*EllFlatness))
+  Compactness=as.numeric(Compactness)
+  Prox_Cap=as.numeric(Prox_Cap)
+  ProxSL=as.numeric(ProxSL)
+  Prox_Nuc=as.numeric(Prox_Nuc)
+  Prox_Myosin=as.numeric(Prox_Myosin)
+  Prox_Zdisc=as.numeric(Prox_Zdisc)
+  #Prox_Sarcomere=as.numeric(Prox_Sarcomere)
+  GeodesicDiameter=as.numeric(GeodesicDiameter)
+  GeodesicDiameterUnit=as.numeric(GeodesicDiameterUnit)
+  Mito_Pool_PVM1 = ifelse(Cell_Number == "3" & MyosinMax >= 0.64, 1,0)
+  Mito_Pool_PVM4 = ifelse(Cell_Number == "2" & MyosinMax >= 0.60,1,0)
+  Mito_Pool_PVM5 = ifelse(Cell_Number == "1" & MyosinMax>= 0.56,1,0)
+  Mito_Pool_Glyc = ifelse(Fiber_Type == "Glycolytic",0, 0)
+  Mito_Pool = (Mito_Pool_PVM1 + Mito_Pool_PVM4 + Mito_Pool_PVM5 + Mito_Pool_Glyc)
+  Mito_Pool = factor(Mito_Pool, labels = c("IFM","PVM"))
+  LipidConnected[LipidConnected == 0] <- NA
+  SRConnected[SRConnected == 0] <- NA
+  SarcolemmaConnected[SarcolemmaConnected==0] <- NA
+  MitoConnected[MitoConnected == 0] <- NA
+  MyosinConnected[MyosinConnected == 0] <- NA
+  Prox_Cap[Prox_Cap == 0] <- NA
+  ProxSL = as.numeric(ProxSL)
+  SSLMito = ifelse(ProxSL <= 0.04 & Mito_Pool == "IFM", 3, 0)
+  SSLMito[is.na(SSLMito)] <- 0
+  PVMMito = ifelse(Mito_Pool == "PVM", 2,0)
+  IMFMito = ifelse(Mito_Pool == "IFM", 1,0)
+  NewPools= (SSLMito + PVMMito + IMFMito)
+  NewPools = factor(NewPools, labels = c("IFM", "PVM", "SSM"))
+  LipidLog = as.logical(LipidConnected)
+  SRLog = as.logical(SRConnected)
+  MitoLog = as.logical(MitoConnected)
+  MyosinLog = as.logical(MyosinConnected)
+  LipidLogNum = as.numeric(LipidLog, is.na = "0")
+  SRLogNum = as.numeric(SRLog, is.na = "0")
+  MitoLogNum = as.numeric(MitoLog, is.na = "0")
+  MyosinLogNum = as.numeric(MyosinLog, is.na = "0")
+  LipidLogNum[is.na(LipidLogNum)] <- 0
+  MitoLogNum[is.na(MitoLogNum)] <- 0
+  MyosinLogNum[is.na(MyosinLogNum)] <- 0
+  SRLogNum[is.na(SRLogNum)] <- 0
+  SLLog = as.logical(SarcolemmaConnected)
+  SLLogNum = as.numeric(SLLog, is.na = "0")
+  SLLogNum[is.na(SLLogNum)] <- 0
+  MyosinMax = as.numeric(MyosinMax)
+})
+
+# Violin plots exploring differences in volume, SA, etc with mean/SD
+# function for plot
+# comparing IMF, SSL, and PVM
+
+VolPools <- ggplot(Morphologic, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=Volume, fill=NewPools, shape=NewPools))+
+  geom_line(size=0.1) +
+  geom_violin(trim=FALSE)+
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 55, hjust = 0.5),
+    legend.position = "none",
+    text = element_text(size = 45, color="black"),
+    axis.title.x=element_blank(),
+    axis.text.x=element_text(size=45, face="bold"),
+    axis.text.y=element_text(size=45)) +
+  ggbreak::scale_y_break(c(2.0,6.0), scales= "fixed", space=0.4) +
+  #scale_y_continuous(expand = expand_scale(mult = c(0,0.1)), position= "left") +
+  labs(title = "Volume", y = expression(paste("Volume (",mu,m^3, ")"))) +
+  facet_wrap(~Fiber_Type) +
+  theme(panel.spacing.x = unit(0, "lines")) +
+  expand_limits(y=c(-0.5,8.0)) +
+  ggplot2::scale_fill_manual(values=c("coral1", "cornflowerblue", "chartreuse4"))
+
+VolLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 1.0, 1.0, 1.0, 2.0, 0.0),
+  xend = c(2.0, 4.0, 2.0, 3.0, 3.0, 3.0),
+  y = c(6.75, 7.75, 6.75, 7.25, 6.75, 7.75),
+  yend = y
+)
+
+VolVertLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 2.0, 1.0, 3.0, 2.0, 3.0, 1.0, 2.0, 3.0),
+  xend = x,
+  y =    c(6.55,   6.55,   7.55,   7.55,   7.55,   6.55,   6.55,   7.05,   7.05,   6.55,  6.55,    7.55,   7.55,   7.55),
+  yend = c(6.7501, 6.7501, 7.7501, 7.7501, 7.7501, 6.7501, 6.7501, 7.2501, 7.2501, 6.7501, 6.7501, 7.7501, 7.7501, 7.7501)
+)
+
+VolStars <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.5, 4.0, 1.5, 2.0, 2.5, 0.0),
+  y = c(7.0, 7.85, 7.0, 7.35, 7.0, 7.85),
+  label = c("***", "**",  "***", "***", "NS", "**")
+)
+
+VolPools  + 
+  geom_segment(data = VolLines, aes(x=x, xend=xend, y=y, yend=yend), size=2, inherit.aes = FALSE) + 
+  geom_segment(data = VolVertLines, aes(x=x, xend=xend, y=y, yend=yend), size = 2, inherit.aes = FALSE) +
+  geom_text(data=VolStars, aes(x=x, y=y, label=label), size=12, inherit.aes=FALSE) +
+  stat_summary(aes(group = Cell_Number, shape = Cell_Number), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='pointrange', 
+               size=1.0,
+               linewidth = 1.0,
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill="white") +
+  ggplot2::scale_shape_manual(values=c(22,21,24,15,16,17,4,5,6)) +
+  stat_summary(aes(), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='crossbar', 
+               size=0.25,
+               linetype = "dashed",
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill=NA)
+
+SA2VolPools <- ggplot(Morphologic, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=SA2Vol,fill=NewPools, shape=NewPools))+
+  geom_line(size=0.1) +
+  geom_violin(trim=FALSE)+
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 55, hjust = 0.5),
+    legend.position = "none",
+    text = element_text(family = 'Arial',size = 45),
+    axis.title.x=element_blank(),
+    axis.text.x=element_text(size=45, face="bold"),
+    axis.text.y=element_text(size=45)
+  ) +
+  #scale_y_break(c(25,35), scales=0.5) +
+  labs(title = "Surface Area to Volume Ratio", y = "Surface Area/Volume",
+       x = "Mitochondrial Pools") +
+  scale_y_continuous(labels= scales::label_number(accuracy=0.1)) +
+  facet_wrap(vars(Fiber_Type)) +
+  theme(panel.spacing.x = unit(0, "lines")) +
+  expand_limits(y=c(0,53))+
+  ggplot2::scale_fill_manual(values=c("coral1", "cornflowerblue", "chartreuse4"))
+
+SA2VolLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 1.0, 1.0, 1.0, 2.0, 0.0),
+  xend = c(2.0, 4.0, 2.0, 3.0, 3.0, 3.0),
+  y = c(40, 50, 40, 45, 40, 50),
+  yend = y
+)
+
+SA2VolVertLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 2.0, 1.0, 3.0, 2.0, 3.0, 1.0, 2.0, 3.0),
+  xend = x,
+  y =    c(37.55, 37.55, 47.55, 47.55, 47.55, 37.55, 37.55, 42.55, 42.55, 37.55, 37.55, 47.55, 47.55, 47.55),
+  yend = c(40.01, 40.01, 50.01, 50.01, 50.01, 40.01, 40.01, 45.01, 45.01, 40.01, 40.01, 50.01, 50.01, 50.01)
+)
+
+SA2VolStars <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.5,      4.0,    1.5,   2.0,   2.5,   0.0),
+  y = c(42.5,     52.5,   42.5,  45.5,  42.5,  52.5),
+  label = c("NS", "***", "***", "***", "NS", "***")
+)
+
+SA2VolPools + 
+  geom_segment(data = SA2VolLines, aes(x=x, xend=xend, y=y, yend=yend), size=2, inherit.aes = FALSE) + 
+  geom_segment(data = SA2VolVertLines, aes(x=x, xend=xend, y=y, yend=yend), size = 2, inherit.aes = FALSE) +
+  geom_text(data=SA2VolStars, aes(x=x, y=y, label=label), size=12, inherit.aes=FALSE) +
+  stat_summary(aes(group = Cell_Number, shape = Cell_Number), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='pointrange', 
+               size=1.0,
+               linewidth = 1.0,
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill="white") +
+  ggplot2::scale_shape_manual(values=c(22,21,24,15,16,17,4,5,6))+
+  stat_summary(aes(), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='crossbar', 
+               size=0.25,
+               linetype = "dashed",
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill=NA)
+
+
+SphericityPools <- ggplot(Morphologic, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=Sphericity,fill=NewPools, shape=NewPools))+
+  geom_line(size=0.1) +
+  geom_violin(trim=FALSE)+
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 55, hjust = 0.5),
+    legend.position = "none",
+    text = element_text(family = 'Arial',size = 45),
+    axis.title.x=element_blank(),
+    axis.text.x=element_text(size=45, face="bold"),
+    axis.text.y=element_text(size=45)
+  ) +
+  #scale_y_continuous(labels = label_number(accuracy=0.1)) +
+  labs(title = "Sphericity", y = "Mitochondrial Sphericity",
+       x = "Mitochondrial Pools") +
+  facet_wrap(vars(Fiber_Type)) +
+  theme(panel.spacing.x = unit(0, "lines")) +
+  expand_limits(y=c(0,1.5))+
+  ggplot2::scale_fill_manual(values=c("coral1", "cornflowerblue", "chartreuse4"))
+
+SphereLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 1.0, 1.0, 1.0, 2.0, 0.0),
+  xend = c(2.0, 4.0, 2.0, 3.0, 3.0, 3.0),
+  y = c(1.1, 1.45, 1.1, 1.25, 1.1, 1.45),
+  yend = y
+)
+
+SphereVertLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 2.0, 1.0, 3.0, 2.0, 3.0, 1.0, 2.0, 3.0),
+  xend = x,
+  y =    c(1.06, 1.06, 1.4,  1.4,  1.4,   1.06,  1.06,  1.2,   1.2,   1.06,  1.06,  1.4,  1.4,  1.4),
+  yend = c(1.11, 1.11, 1.46, 1.46, 1.46,  1.11,  1.11,  1.26,  1.26,  1.11,  1.11,  1.46,  1.46,  1.46)
+)
+
+SphereStars <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.5,      4.0,    1.5,   2.0,   2.5,   0.0),
+  y = c(1.18,      1.55,    1.18,   1.3,  1.15,  1.55),
+  label = c("NS", "NS", "NS", "***", "***", "NS")
+)
+
+SphericityPools + 
+  geom_segment(data = SphereLines, aes(x=x, xend=xend, y=y, yend=yend), size=2, inherit.aes = FALSE) + 
+  geom_segment(data = SphereVertLines, aes(x=x, xend=xend, y=y, yend=yend), size = 2, inherit.aes = FALSE) +
+  geom_text(data=SphereStars, aes(x=x, y=y, label=label), size=12, inherit.aes=FALSE) +
+  stat_summary(aes(group = Cell_Number, shape = Cell_Number), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='pointrange', 
+               size=1.0,
+               linewidth = 1.0,
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill="white") +
+  ggplot2::scale_shape_manual(values=c(22,21,24,15,16,17,4,5,6))+
+  stat_summary(aes(), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='crossbar', 
+               size=0.25,
+               linetype = "dashed",
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill=NA)
+
+ElongationPools <- ggplot(Morphologic, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=EllElon,fill=NewPools, shape=NewPools))+
+  geom_line(size=0.1) +
+  geom_violin(trim=FALSE)+
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 55, hjust = 0.5),
+    legend.position = "none",
+    text = element_text(family = 'Arial',size = 45),
+    axis.title.x=element_blank(),
+    axis.text.x=element_text(size=45, face="bold"),
+    axis.text.y=element_text(size=45)
+  ) +
+  scale_y_continuous(labels= scales::label_number(accuracy=0.1)) +
+  labs(title = "Elongation", y = "Largest Radius/
+       Middle Radius",
+       x = "Mitochondrial Pools") +
+  facet_wrap(vars(Fiber_Type)) +
+  theme(panel.spacing.x = unit(0, "lines")) +
+  expand_limits(y=c(0,22.2))+
+  ggplot2::scale_fill_manual(values=c("coral1", "cornflowerblue", "chartreuse4"))
+
+ElongLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 1.0, 1.0, 1.0, 2.0, 0.0),
+  xend = c(2.0, 4.0, 2.0, 3.0, 3.0, 3.0),
+  y = c(17, 21, 17, 19, 17, 21),
+  yend = y
+)
+
+ElongVertLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 2.0, 1.0, 3.0, 2.0, 3.0, 1.0, 2.0, 3.0),
+  xend = x,
+  y =    c(16.5, 16.5, 20.5, 20.5, 20.5,  16.5,  16.5,  18.5,  18.5,  16.5,  16.5,  20.5,  20.5,  20.5),
+  yend = c(17.1, 17.1, 21.1, 21.1, 21.1,  17.1,  17.1,  19.1,  19.1,  17.1,  17.1,  21.1,  21.1,  21.1)
+)
+
+ElongStars <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.5,      4.0,    1.5,   2.0,   2.5,   0.0),
+  y = c(18,      21.85,    18,   19.5,  18,  21.85),
+  label = c("NS", "NS", "*", "***", "***", "NS")
+)
+
+ElongationPools + 
+  #ggbreak::scale_y_break(c(10,15), scales= "fixed", space=0.6, ticklabels = c(15.0,17.5,20.0)) +
+  geom_segment(data = ElongLines, aes(x=x, xend=xend, y=y, yend=yend), size=2, inherit.aes = FALSE) + 
+  geom_segment(data = ElongVertLines, aes(x=x, xend=xend, y=y, yend=yend), size = 2, inherit.aes = FALSE) +
+  geom_text(data=ElongStars, aes(x=x, y=y, label=label), size=12, inherit.aes=FALSE) +
+  stat_summary(aes(group = Cell_Number, shape = Cell_Number), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='pointrange', 
+               size=1.0,
+               linewidth = 1.0,
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill="white") +
+  ggplot2::scale_shape_manual(values=c(22,21,24,15,16,17,4,5,6))+
+  stat_summary(aes(), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='crossbar', 
+               size=0.25,
+               linetype = "dashed",
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill=NA)
+
+AspectRatioPools <- ggplot(Morphologic, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=AspectRatio,fill=NewPools, shape=NewPools))+
+  geom_line(size=0.1) +
+  geom_violin(trim=FALSE)+
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 55, hjust = 0.5),
+    legend.position = "none",
+    text = element_text(family = 'Arial',size = 45),
+    axis.title.x=element_blank(),
+    axis.text.x=element_text(size=45, face="bold"),
+    axis.text.y=element_text(size=45)
+  ) +
+  #ggbreak::scale_y_break(c(15,24), scales= "fixed", space=0.7, ticklabels = c(24,27,30)) +
+  labs(title = "Aspect Ratio", y = "Aspect Ratio",
+       x = "Mitochondrial Pools") +
+  facet_wrap(vars(Fiber_Type)) +
+  theme(panel.spacing.x = unit(0, "lines")) +
+  expand_limits(y=c(0,32)) +
+  scale_y_continuous(labels= scales::label_number(accuracy=0.1))+
+  ggplot2::scale_fill_manual(values=c("coral1", "cornflowerblue", "chartreuse4"))
+
+AspectLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 1.0, 1.0, 1.0, 2.0, 0.0),
+  xend = c(2.0, 4.0, 2.0, 3.0, 3.0, 3.0),
+  y = c(25, 30, 25, 27.5, 25, 30),
+  yend = y
+)
+
+AspectVertLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 2.0, 1.0, 3.0, 2.0, 3.0, 1.0, 2.0, 3.0),
+  xend = x,
+  y =    c(24,   24,   29,   29,   29,    24,    24,    26.5,  26.5,  24,    24,    29,    29,    29),
+  yend = c(25.1, 25.1, 30.1, 30.1, 30.1,  25.1,  25.1,  27.6,  27.6,  25.1,  25.1,  30.1,  30.1,  30.1)
+)
+
+AspectStars <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.5,        4.0,  1.5,   2.0,   2.5,   0.0),
+  y = c(26.2,         31.5,    26.2,   28,  26,     31.5),
+  label = c("NS", "NS", "NS", "***", "***", "NS")
+)
+
+AspectRatioPools + 
+  geom_segment(data = AspectLines, aes(x=x, xend=xend, y=y, yend=yend), size=2, inherit.aes = FALSE) + 
+  geom_segment(data = AspectVertLines, aes(x=x, xend=xend, y=y, yend=yend), size = 2, inherit.aes = FALSE) +
+  geom_text(data=AspectStars, aes(x=x, y=y, label=label), size=12, inherit.aes=FALSE) +
+  stat_summary(aes(group = Cell_Number, shape = Cell_Number), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='pointrange', 
+               size=1.0,
+               linewidth = 1.0,
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill="white") +
+  ggplot2::scale_shape_manual(values=c(22,21,24,15,16,17,4,5,6))+
+  stat_summary(aes(), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='crossbar', 
+               size=0.25,
+               linetype = "dashed",
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill=NA)
+
+LengthPools <- ggplot(Morphologic, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=GeodesicDiameterUnit,fill=NewPools, shape=NewPools))+
+  geom_line(size=0.1) +
+  geom_violin(trim=FALSE)+
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 55, hjust = 0.5),
+    legend.position = "none",
+    text = element_text(family = 'Arial',size = 45),
+    axis.title.x=element_blank(),
+    axis.text.x=element_text(size=45, face="bold"),
+    axis.text.y=element_text(size=45)
+  ) +
+  #ggbreak::scale_y_break(c(5,12), scales= "fixed", space=0.7) +
+  labs(title = "Length", y = expression(paste("Length (",mu,m, ")")),
+       x = "Mitochondrial Pools") +
+  facet_wrap(vars(Fiber_Type)) +
+  theme(panel.spacing.x = unit(0, "lines")) +
+  expand_limits(y=c(0,15.8)) +
+  scale_y_continuous(labels= scales::label_number(accuracy=0.1))+
+  ggplot2::scale_fill_manual(values=c("coral1", "cornflowerblue", "chartreuse4"))
+
+LengthLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 1.0, 1.0, 1.0, 2.0, 0.0),
+  xend = c(2.0, 4.0, 2.0, 3.0, 3.0, 3.0),
+  y = c(13, 17, 13, 15, 13, 17),
+  yend = y
+)
+
+LengthVertLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 2.0, 1.0, 3.0, 2.0, 3.0, 1.0, 2.0, 3.0),
+  xend = x,
+  y =    c(12.5,  12.5,  16.5,  16.5,  16.5,   12.5,   12.5,   14.5,  14.5,  12.5,  12.5,  16.5,  16.5,   16.5),
+  yend = c(13.01, 13.01, 17.01, 17.01, 17.01,  13.01,  13.01,  15.01, 15.01, 13.01, 13.01, 17.01, 17.01,  17.01)
+)
+
+LengthStars <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.5,        4.0,  1.5,   2.0,   2.5,   0.0),
+  y = c(13.7,       18,  14,  15.3,  13.7,  18),
+  label = c("NS", "NS", "***", "***", "***", "NS")
+)
+
+LengthPools + 
+  geom_segment(data = LengthLines, aes(x=x, xend=xend, y=y, yend=yend), size=2, inherit.aes = FALSE) + 
+  geom_segment(data = LengthVertLines, aes(x=x, xend=xend, y=y, yend=yend), size = 2, inherit.aes = FALSE) +
+  geom_text(data=LengthStars, aes(x=x, y=y, label=label), size=12, inherit.aes=FALSE) +
+  stat_summary(aes(group = Cell_Number, shape = Cell_Number), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='pointrange', 
+               size=1.0,
+               linewidth = 1.0,
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill="white") +
+  ggplot2::scale_shape_manual(values=c(22,21,24,15,16,17,4,5,6))+
+  stat_summary(aes(), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='crossbar', 
+               size=0.25,
+               linetype = "dashed",
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill=NA)
+
+LipidConnectedPools <- ggplot(Morphologic, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=LipidConnected,fill=NewPools, shape=NewPools))+
+  geom_line(size=0.1) +
+  geom_violin(trim=FALSE)+
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 55, hjust = 0.5),
+    legend.position = "none",
+    text = element_text(family = 'Arial',size = 45),
+    axis.title.x=element_blank(),
+    axis.text.x=element_text(size=45, face="bold"),
+    axis.text.y=element_text(size=45)
+  ) +
+  labs(title = "% Outer Mitochondrial Membrane
+  Connected to Lipid Droplets", y = "% Outer Mitochondrial 
+       Membrane Contact",
+       x = "Mitochondrial Pools") +
+  expand_limits(y=c(0,35)) +
+  scale_y_continuous(labels= scales::label_number(accuracy=0.1))+
+  ggplot2::scale_fill_manual(values=c("coral1", "cornflowerblue", "chartreuse4"))
+
+LipidConnectedPools + 
+  geom_line(dplyr::tibble(x=c(1.0,2.0), y=c(50,50)),
+            mapping = aes(x=x, y=y),
+            size = 2,
+            inherit.aes=FALSE) +
+  geom_line(dplyr::tibble(x=c(2.0,3.0), y=c(50,50)),
+            mapping = aes(x=x, y=y),
+            size = 2,
+            inherit.aes=FALSE) +
+  geom_line(dplyr::tibble(x=c(1.0,3.0), y=c(55,55)),
+            mapping = aes(x=x, y=y),
+            size = 2,
+            inherit.aes=FALSE) +
+  geom_line(dplyr::tibble(x=c(1.0,1.0), y=c(49,50.01)),
+            mapping = aes(x=x, y=y),
+            size = 2,
+            inherit.aes=FALSE) +
+  geom_line(dplyr::tibble(x=c(2.0,2.0), y=c(49,50.01)),
+            mapping = aes(x=x, y=y),
+            size = 2,
+            inherit.aes=FALSE) +
+  geom_line(dplyr::tibble(x=c(3.0,3.0), y=c(49,50.01)),
+            mapping = aes(x=x, y=y),
+            size = 2,
+            inherit.aes=FALSE) +
+  geom_line(dplyr::tibble(x=c(1.0,1.0), y=c(54,55.01)),
+            mapping = aes(x=x, y=y),
+            size = 2,
+            inherit.aes=FALSE) +
+  geom_line(dplyr::tibble(x=c(3.0,3.0), y=c(54,55.01)),
+            mapping = aes(x=x, y=y),
+            size = 2,
+            inherit.aes=FALSE) +
+  geom_text(dplyr::tibble(x=1.5, y=52.5),
+            mapping = aes(x=x, y=y, label = "***"),
+            size = 12,
+            inherit.aes=FALSE) +
+  geom_text(dplyr::tibble(x=2.5, y=52.5),
+            mapping = aes(x=x, y=y, label = "NS"),
+            size = 12,
+            inherit.aes=FALSE) +
+  geom_text(dplyr::tibble(x=2.0, y=57),
+            mapping = aes(x=x, y=y, label = "***"),
+            size = 12,
+            inherit.aes=FALSE) +
+  stat_summary(aes(group = Cell_Number, shape = Cell_Number), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='pointrange', 
+               size=1.0,
+               linewidth = 1.0,
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill="white") +
+  ggplot2::scale_shape_manual(values=c(22,21,24,15,16,17,4,5,6))+
+  stat_summary(aes(), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='crossbar', 
+               size=0.25,
+               linetype = "dashed",
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill=NA)
+
+
+SRPools <- ggplot(Morphologic, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=SRConnected,fill=NewPools, shape=NewPools))+
+  geom_line(size=0.1) +
+  geom_violin(trim=FALSE)+
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 45, hjust = 0.5),
+    legend.position = "none",
+    text = element_text(family = 'Arial',size = 45),
+    axis.title.x=element_blank(),
+    axis.text.x=element_text(size=45, face="bold", color = "black"),
+    axis.text.y=element_text(size=45, color = "black")
+  ) +
+  #ggbreak::scale_y_break(c(40,80), scales="fixed", space = 0.8, ticklabels = c(80, 90)) +
+  labs(title = "% Outer Mitochondrial Membrane Connected
+  to Sarcoplasmic Reticulum", y = "% Outer Mitochondrial
+       Memberane Contact",
+       x = "Mitochondrial Pools") +
+  facet_wrap(vars(Fiber_Type)) +
+  theme(panel.spacing.x = unit(0, "lines")) +
+  expand_limits(y=c(0,95))+
+  ggplot2::scale_fill_manual(values=c("coral1", "cornflowerblue", "chartreuse4")) 
+
+SRLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 1.0, 1.0, 1.0, 2.0, 0.0),
+  xend = c(2.0, 4.0, 2.0, 3.0, 3.0, 3.0),
+  y = c(75, 90, 75, 83, 75, 90),
+  yend = y
+)
+
+SRVertLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 2.0, 1.0, 3.0, 2.0, 3.0, 1.0, 2.0, 3.0),
+  xend = x,
+  y =    c(73,    73,    88,   88,   88,    73,    73,    81,   81,   73,   73,   88,   88,    88),
+  yend = c(75.1, 75.1, 90.1, 90.1, 90.1,  75.1,  75.1,  83.1, 83.1, 75.1, 75.1, 90.1, 90.1,  90.1)
+)
+
+SRStars <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.5,        4.0,  1.5,   2.0,   2.5,   0.0),
+  y = c(79,       93,     76,    84,    79,    93),
+  label = c("NS", "***", "***", "***", "NS", "***")
+)
+
+SRPools + 
+  geom_segment(data = SRLines, aes(x=x, xend=xend, y=y, yend=yend), size=2, inherit.aes = FALSE) + 
+  geom_segment(data = SRVertLines, aes(x=x, xend=xend, y=y, yend=yend), size = 2, inherit.aes = FALSE) +
+  geom_text(data=SRStars, aes(x=x, y=y, label=label), size=11, inherit.aes=FALSE) +
+  stat_summary(aes(group = Cell_Number, shape = Cell_Number), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='pointrange', 
+               size=1.0,
+               linewidth = 1.0,
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill="white") +
+  ggplot2::scale_shape_manual(values=c(22,21,24,15,16,17,4,5,6))+
+  stat_summary(aes(), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='crossbar', 
+               size=0.25,
+               linetype = "dashed",
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill=NA)
+
+
+MitoConnectedPools <- ggplot(Morphologic, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=MitoConnected,fill=NewPools, shape=NewPools))+
+  geom_line(size=0.1) +
+  geom_violin(trim=FALSE)+
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 50, hjust = 0.5),
+    legend.position = "none",
+    text = element_text(family = 'Arial',size = 45),
+    axis.title.x=element_blank(),
+    axis.text.x=element_text(size=45, face="bold"),
+    axis.text.y=element_text(size=45)
+  ) +
+  labs(title = "% Outer Mitochondrial Membrane 
+  Connected to Neighboring Mitochondria", y = "% Outer Mitochondrial
+       Memberane Contact",
+       x = "Mitochondrial Pools") +
+  facet_wrap(vars(Fiber_Type)) +
+  theme(panel.spacing.x = unit(0, "lines")) +
+  expand_limits(y=c(0,125))+
+  ggplot2::scale_fill_manual(values=c("coral1", "cornflowerblue", "chartreuse4")) 
+
+MitoLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 1.0, 1.0, 1.0, 2.0, 0.0),
+  xend = c(2.0, 4.0, 2.0, 3.0, 3.0, 3.0),
+  y = c(110, 130, 110, 120, 110, 130),
+  yend = y
+)
+
+MitoVertLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 2.0, 1.0, 3.0, 2.0, 3.0, 1.0, 2.0, 3.0),
+  xend = x,
+  y =    c(105,    105,    125,    125,    125,     105,     105,     115,    115,    105,    105,    125,    125,     125),
+  yend = c(110.01, 110.01, 130.01, 130.01, 130.01,  110.01,  110.01,  120.01, 120.01, 110.01, 110.01, 130.01, 130.01,  130.01)
+)
+
+MitoStars <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.5,        4.0,  1.5,   2.0,   2.5,   0.0),
+  y = c(117,       137,   112,    121,  112,    137),
+  label = c("NS", "NS", "***", "***", "***", "NS")
+)
+
+MitoConnectedPools +   
+  geom_segment(data = MitoLines, aes(x=x, xend=xend, y=y, yend=yend), size=2, inherit.aes = FALSE) + 
+  geom_segment(data = MitoVertLines, aes(x=x, xend=xend, y=y, yend=yend), size = 2, inherit.aes = FALSE) +
+  geom_text(data=MitoStars, aes(x=x, y=y, label=label), size=11, inherit.aes=FALSE) +
+  stat_summary(aes(group = Cell_Number, shape = Cell_Number), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='pointrange', 
+               size=1.0,
+               linewidth = 1.0,
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill="white") +
+  ggplot2::scale_shape_manual(values=c(22,21,24,15,16,17,4,5,6))+
+  stat_summary(aes(), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='crossbar', 
+               size=0.25,
+               linetype = "dashed",
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill=NA)
+
+
+SLConnectedPools <- ggplot(Morphologic, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=SarcolemmaConnected,fill=NewPools, shape=NewPools))+
+  geom_line(size=0.1) +
+  geom_violin(trim=FALSE)+
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 55, hjust = 0.5),
+    legend.position = "none",
+    text = element_text(family = 'Arial',size = 45),
+    axis.title.x=element_blank(),
+    axis.text.x=element_text(size=45, face="bold"),
+    axis.text.y=element_text(size=45)
+  ) +
+  labs(title = "% Outer Mitochondrial Membrane 
+  Connected to Sarcolemma", y = "% Outer Mitochondrial
+       Memberane Contact",
+       x = "Mitochondrial Pools") +
+  facet_wrap(vars(Fiber_Type)) +
+  theme(panel.spacing.x = unit(0, "lines")) +
+  #expand_limits(y=c(0,30))+
+  ggplot2::scale_fill_manual(values=c("coral1", "cornflowerblue", "chartreuse4")) 
+
+SLLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic",
+                 "Oxidative", "Oxidative"),
+  x = c(1.0, 2.0, 0.0),
+  xend = c(4.0, 3.0, 3.0),
+  y = c(50, 40, 50),
+  yend = y
+)
+
+SLVertLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 2.0, 3.0, 2.0, 3.0, 1.0, 2.0, 3.0),
+  xend = x,
+  y =    c(  49,   49,   49,    39,    39,    49,   49,   49),
+  yend = c(50.1, 50.1, 50.1,  40.1,  40.1,  50.1, 50.1, 50.1)
+)
+
+SLStars <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic",
+                 "Oxidative", "Oxidative"),
+  x = c(4.0,        2.5,  0.0),
+  y = c(52,       42,   52),
+  label = c("***", "NS", "***")
+)
+
+SLConnectedPools +   
+  geom_segment(data = SLLines, aes(x=x, xend=xend, y=y, yend=yend), size=2, inherit.aes = FALSE) + 
+  geom_segment(data = SLVertLines, aes(x=x, xend=xend, y=y, yend=yend), size = 2, inherit.aes = FALSE) +
+  geom_text(data=SLStars, aes(x=x, y=y, label=label), size=11, inherit.aes=FALSE) +
+  stat_summary(aes(group = Cell_Number, shape = Cell_Number), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='pointrange', 
+               size=1.0,
+               linewidth = 1.0,
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill="white") +
+  ggplot2::scale_shape_manual(values=c(22,21,24,15,16,17,4,5,6))+
+  stat_summary(aes(), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='crossbar', 
+               size=0.25,
+               linetype = "dashed",
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill=NA)
+
+
+MyosinConnectedPools <- ggplot(Morphologic, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=MyosinConnected,fill=NewPools, shape=NewPools))+
+  geom_line(size=0.1) +
+  geom_violin(trim=FALSE)+
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 55, hjust = 0.5),
+    legend.position = "none",
+    text = element_text(family = 'Arial',size = 45),
+    axis.title.x=element_blank(),
+    axis.text.x=element_text(size=45, face="bold"),
+    axis.text.y=element_text(size=45)
+  ) +
+  labs(title = "% Outer Mitochondrial Membrane 
+  Next to Myosin", y = "% Outer Mitochondrial
+       Memberane Contact",
+       x = "Mitochondrial Pools") +
+  facet_wrap(vars(Fiber_Type)) +
+  theme(panel.spacing.x = unit(0, "lines")) +
+  #expand_limits(y=c(0,30))+
+  ggplot2::scale_fill_manual(values=c("coral1", "cornflowerblue", "chartreuse4")) 
+
+MyosinLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 1.0, 1.0, 1.0, 2.0, 0.0),
+  xend = c(2.0, 4.0, 2.0, 3.0, 3.0, 3.0),
+  y = c(60, 70, 60, 65, 60, 70),
+  yend = y
+)
+
+MyosinVertLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 2.0, 1.0, 3.0, 2.0, 3.0, 1.0, 2.0, 3.0),
+  xend = x,
+  y =    c(  59,   59,   69,   69,   69,    59,    59,    64,   64,   59,   59,   69,   69,    69),
+  yend = c(60.1, 60.1, 70.1, 70.1, 70.1,  60.1,  60.1,  65.1, 65.1, 60.1, 60.1, 70.1, 70.1,  70.1)
+)
+
+MyosinStars <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.5,        4.0,  1.5,   2.0,   2.5,   0.0),
+  y = c(64,       73,   62,    66,  62.5,    73),
+  label = c("NS", "NS", "***", "***", "NS", "NS")
+)
+
+MyosinConnectedPools +   
+  geom_segment(data = MyosinLines, aes(x=x, xend=xend, y=y, yend=yend), size=2, inherit.aes = FALSE) + 
+  geom_segment(data = MyosinVertLines, aes(x=x, xend=xend, y=y, yend=yend), size = 2, inherit.aes = FALSE) +
+  geom_text(data=MyosinStars, aes(x=x, y=y, label=label), size=11, inherit.aes=FALSE) +
+  stat_summary(aes(group = Cell_Number, shape = Cell_Number), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='pointrange', 
+               size=1.0,
+               linewidth = 1.0,
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill="white") +
+  ggplot2::scale_shape_manual(values=c(22,21,24,15,16,17,4,5,6))+
+  stat_summary(aes(), 
+               data = Morphologic, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='crossbar', 
+               size=0.25,
+               linetype = "dashed",
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill=NA)
+
+########MORPHOLOGY STATS#############
+##IMF vs SSL vs PVM##
+#Split up fibers for significance markers on graphs
+#For Glycolytic Fibers
+
+#Volume#
+Lin_mod_Vol_0 <- lm(Volume ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Glycolytic"))
+Lin_mod_Vol_0
+
+Lin_mod_Vol_1 <- lm(Volume ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Glycolytic"))
+Lin_mod_Vol_1
+
+summary(Lin_mod_Vol_1)
+
+Lin_mod_Vol_0 <- lm(Volume ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Vol_0
+
+Lin_mod_Vol_1 <- lm(Volume ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Vol_1
+
+summary(Lin_mod_Vol_1)
+
+Lin_mod_Vol_2 <- lm(Volume ~ Cell_Number + relevel(NewPools, ref="PVM"), data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Vol_2
+
+summary(Lin_mod_Vol_2)
+
+tapply(Morphologic$Volume, list(Morphologic$Fiber_Type, Morphologic$NewPools), mean, na.rm=TRUE)
+tapply(Morphologic$Volume, list(Morphologic$Fiber_Type, Morphologic$NewPools), sd, na.rm=TRUE)
+
+tapply(Morphologic$Volume, Morphologic$Cell_Number, mean)
+tapply(Morphologic$Volume, Morphologic$Cell_Number,sd)
+
+#Surface Area to Volume Ratio#
+#Glycolytic Fibers
+Lin_mod_SA2Vol_0 <- lm(SA2Vol ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Glycolytic"))
+Lin_mod_SA2Vol_0
+
+Lin_mod_SA2Vol_1 <- lm(SA2Vol ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Glycolytic"))
+Lin_mod_SA2Vol_1
+
+summary(Lin_mod_SA2Vol_1)
+
+
+#Oxidative Fibers
+Lin_mod_SA2Vol_0 <- lm(SA2Vol ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_SA2Vol_0
+
+Lin_mod_SA2Vol_1 <- lm(SA2Vol ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_SA2Vol_1
+
+summary(Lin_mod_SA2Vol_1)
+
+Lin_mod_SA2Vol_2 <- lm(SA2Vol ~ Cell_Number + relevel(NewPools, ref="PVM"), data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_SA2Vol_2
+
+summary(Lin_mod_SA2Vol_2)
+tapply(Morphologic$SA2Vol, list(Morphologic$Fiber_Type, Morphologic$NewPools), mean, na.rm=TRUE)
+tapply(Morphologic$SA2Vol, list(Morphologic$Fiber_Type, Morphologic$NewPools), sd, na.rm=TRUE)
+
+tapply(Morphologic$SA2Vol, Morphologic$Cell_Number,mean)
+tapply(Morphologic$SA2Vol, Morphologic$Cell_Number,sd)
+
+#Sphericity#
+#Glycolytic Fibers
+Lin_mod_Sphere_0 <- lm(Sphericity ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Glycolytic"))
+Lin_mod_Sphere_0
+
+Lin_mod_Sphere_1 <- lm(Sphericity ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Glycolytic"))
+Lin_mod_Sphere_1
+
+summary(Lin_mod_Sphere_1)
+
+#Oxidative Fibers
+Lin_mod_Sphere_0 <- lm(Sphericity ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Sphere_0
+
+Lin_mod_Sphere_1 <- lm(Sphericity ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Sphere_1
+
+summary(Lin_mod_Sphere_1)
+
+Lin_mod_Sphere_2 <- lm(Sphericity ~ Cell_Number + relevel(NewPools, ref="PVM"), data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Sphere_2
+
+summary(Lin_mod_Sphere_2)
+
+tapply(Morphologic$Sphericity, Morphologic$Cell_Number,mean)
+tapply(Morphologic$Sphericity, Morphologic$Cell_Number,sd)
+
+tapply(Morphologic$Sphericity, list(Morphologic$Fiber_Type, Morphologic$NewPools), mean, na.rm=TRUE)
+tapply(Morphologic$Sphericity, list(Morphologic$Fiber_Type, Morphologic$NewPools), sd, na.rm=TRUE)
+
+#Aspect Ratio#
+#Glycolytic Fibers
+Lin_mod_Aspect_0 <- lm(AspectRatio ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Glycolytic"))
+Lin_mod_Aspect_0
+
+Lin_mod_Aspect_1 <- lm(AspectRatio ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Glycolytic"))
+Lin_mod_Aspect_1
+
+summary(Lin_mod_Aspect_1)
+
+
+#Oxidative Fibers
+Lin_mod_Aspect_0 <- lm(AspectRatio ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Aspect_0
+
+Lin_mod_Aspect_1 <- lm(AspectRatio ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Aspect_1
+
+summary(Lin_mod_Aspect_1)
+
+Lin_mod_Aspect_2 <- lm(AspectRatio ~ Cell_Number + relevel(NewPools, ref="PVM"), data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Aspect_2
+
+summary(Lin_mod_Aspect_2)
+
+tapply(Morphologic$AspectRatio, list(Morphologic$Fiber_Type, Morphologic$NewPools), mean, na.rm=TRUE)
+tapply(Morphologic$AspectRatio, list(Morphologic$Fiber_Type, Morphologic$NewPools), sd, na.rm=TRUE)
+
+tapply(Morphologic$AspectRatio, Morphologic$Cell_Number,mean)
+tapply(Morphologic$AspectRatio, Morphologic$Cell_Number,sd)
+
+#Elongation#
+#Glycolytic Fibers
+Lin_mod_Elong_0 <- lm(EllElon ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Glycolytic"))
+Lin_mod_Elong_0
+
+Lin_mod_Elong_1 <- lm(EllElon ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Glycolytic"))
+Lin_mod_Elong_1
+
+summary(Lin_mod_Elong_1)
+
+#Oxidative Fibers
+Lin_mod_Elong_0 <- lm(EllElon ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Elong_0
+
+Lin_mod_Elong_1 <- lm(EllElon ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Elong_1
+
+summary(Lin_mod_Elong_1)
+
+Lin_mod_Elong_2 <- lm(EllElon ~ Cell_Number + relevel(NewPools, ref="PVM"), data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Elong_2
+
+summary(Lin_mod_Elong_2)
+
+tapply(Morphologic$EllElon, list(Morphologic$Fiber_Type, Morphologic$NewPools), mean, na.rm=TRUE)
+tapply(Morphologic$EllElon, list(Morphologic$Fiber_Type, Morphologic$NewPools), sd, na.rm=TRUE)
+
+tapply(Morphologic$EllElon, Morphologic$Cell_Number,mean)
+tapply(Morphologic$EllElon, Morphologic$Cell_Number,sd)
+
+#Mitochondrial Length#
+#Glycolytic Fibers
+Lin_mod_Length_0 <- lm(GeodesicDiameterUnit ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Glycolytic"))
+Lin_mod_Length_0
+
+Lin_mod_Length_1 <- lm(GeodesicDiameterUnit ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Glycolytic"))
+Lin_mod_Length_1
+
+summary(Lin_mod_Length_1)
+
+LengthScatter2 <- ggplot(MorphologicOx, aes(x=NewPools, y=GeodesicDiameterUnit, color = Cell_Number, shape = NewPools))+
+  # geom_jitter(size=3, alpha = 0.5) +
+  # geom_smooth(method=lm, se=FALSE) +
+  geom_violin(trim=FALSE) +
+  facet_wrap(~Cell_Number, scales="free") +
+  theme_minimal() +
+  stat_summary(aes(), 
+               data = MorphologicOx, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='crossbar', 
+               size=0.25,
+               linetype = "dashed",
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill=NA)
+
+LengthScatter2
+
+#Oxidative Fibers
+Lin_mod_Length_0 <- lm(GeodesicDiameterUnit ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Length_0
+
+Lin_mod_Length_1 <- lm(GeodesicDiameterUnit ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Length_1
+
+summary(Lin_mod_Length_1)
+
+Lin_mod_Length_2 <- lm(GeodesicDiameterUnit ~ Cell_Number + relevel(NewPools, ref="PVM"), data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Length_2
+
+summary(Lin_mod_Length_2)
+
+tapply(Morphologic$GeodesicDiameterUnit, list(Morphologic$Fiber_Type, Morphologic$NewPools), mean, na.rm=TRUE)
+tapply(Morphologic$GeodesicDiameterUnit, list(Morphologic$Fiber_Type, Morphologic$NewPools), sd, na.rm=TRUE)
+
+tapply(Morphologic$GeodesicDiameterUnit, Morphologic$Cell_Number,mean, na.rm=TRUE)
+tapply(Morphologic$GeodesicDiameterUnit, Morphologic$Cell_Number,sd, na.rm=TRUE)
+
+#Percent Connected to Lipids#
+#Only found in Oxidative fibers
+Lin_mod_Lipid_0 <- lm(LipidConnected ~ Cell_Number, data=Morphologic)
+Lin_mod_Lipid_0
+
+Lin_mod_Lipid_1 <- lm(LipidConnected ~ Cell_Number + NewPools, data=Morphologic)
+Lin_mod_Lipid_1
+
+summary(Lin_mod_Lipid_1)
+
+Lin_mod_Lipid_2 <- lm(LipidConnected ~ Cell_Number + relevel(NewPools, ref="PVM"), data=Morphologic)
+Lin_mod_Lipid_2
+
+summary(Lin_mod_Lipid_2)
+
+tapply(Morphologic$LipidConnected, Morphologic$NewPools, mean, na.rm=TRUE)
+tapply(Morphologic$LipidConnected, Morphologic$NewPools, sd, na.rm=TRUE)
+
+tapply(Morphologic$LipidConnected, Morphologic$Cell_Number,mean, na.rm=TRUE)
+tapply(Morphologic$LipidConnected, Morphologic$Cell_Number,sd, na.rm=TRUE)
+
+#Percent Connected to SR#
+#Glycolytic Fibers
+Lin_mod_SR_0 <- lm(SRConnected ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Glycolytic"))
+Lin_mod_SR_0
+
+Lin_mod_SR_1 <- lm(SRConnected ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Glycolytic"))
+Lin_mod_SR_1
+
+summary(Lin_mod_SR_1)
+
+#Oxidative Fibers
+Lin_mod_SR_0 <- lm(SRConnected ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_SR_0
+
+Lin_mod_SR_1 <- lm(SRConnected ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_SR_1
+
+summary(Lin_mod_SR_1)
+
+Lin_mod_SR_2 <- lm(SRConnected ~ Cell_Number + relevel(NewPools, ref="PVM"), data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_SR_2
+
+summary(Lin_mod_SR_2)
+
+tapply(Morphologic$SRConnected, list(Morphologic$Fiber_Type, Morphologic$NewPools), mean, na.rm=TRUE)
+tapply(Morphologic$SRConnected, list(Morphologic$Fiber_Type, Morphologic$NewPools), sd, na.rm=TRUE)
+
+tapply(Morphologic$SRConnected, Morphologic$Cell_Number, mean, na.rm=TRUE)
+tapply(Morphologic$SRConnected, Morphologic$Cell_Number, sd, na.rm=TRUE)
+
+#Percent Connected to SL#
+
+#Oxidative Fibers
+Lin_mod_SL_0 <- lm(SarcolemmaConnected ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_SL_0
+
+Lin_mod_SL_1 <- lm(SarcolemmaConnected ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_SL_1
+
+summary(Lin_mod_SL_1)
+
+Lin_mod_SL_2 <- lm(SarcolemmaConnected ~ Cell_Number + relevel(NewPools, ref="PVM"), data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_SL_2
+
+summary(Lin_mod_SL_2)
+
+tapply(Morphologic$SarcolemmaConnected, Morphologic$NewPools, mean, na.rm=TRUE)
+tapply(Morphologic$SarcolemmaConnected, Morphologic$NewPools, sd, na.rm=TRUE)
+
+tapply(Morphologic$SarcolemmaConnected, Morphologic$Cell_Number, mean, na.rm=TRUE)
+tapply(Morphologic$SarcolemmaConnected, Morphologic$Cell_Number, sd, na.rm=TRUE)
+
+#Percent Connected to Myosin#
+#Glycolytic Fibers
+Lin_mod_Myosin_0 <- lm(MyosinConnected ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Glycolytic"))
+Lin_mod_Myosin_0
+
+Lin_mod_Myosin_1 <- lm(MyosinConnected ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Glycolytic"))
+Lin_mod_Myosin_1
+
+summary(Lin_mod_Myosin_1)
+
+#Oxidative Fibers
+Lin_mod_Myosin_0 <- lm(MyosinConnected ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Myosin_0
+
+Lin_mod_Myosin_1 <- lm(MyosinConnected ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Myosin_1
+
+summary(Lin_mod_Myosin_1)
+
+Lin_mod_Myosin_2 <- lm(MyosinConnected ~ Cell_Number + relevel(NewPools, ref="PVM"), data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Myosin_2
+
+summary(Lin_mod_Myosin_2)
+
+tapply(Morphologic$MyosinConnected, list(Morphologic$Fiber_Type, Morphologic$NewPools), mean, na.rm=TRUE)
+tapply(Morphologic$MyosinConnected, list(Morphologic$Fiber_Type, Morphologic$NewPools), sd, na.rm=TRUE)
+
+tapply(Morphologic$MyosinConnected, Morphologic$Cell_Number, mean, na.rm=TRUE)
+tapply(Morphologic$MyosinConnected, Morphologic$Cell_Number, sd, na.rm=TRUE)
+
+
+#Percent Connected to Mito#
+#Glycolytic Fibers
+Lin_mod_Mito_0 <- lm(MitoConnected ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Glycolytic"))
+Lin_mod_Mito_0
+
+Lin_mod_Mito_1 <- lm(MitoConnected ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Glycolytic"))
+Lin_mod_Mito_1
+
+summary(Lin_mod_Mito_1)
+
+#Oxidative Fibers
+Lin_mod_Mito_0 <- lm(MitoConnected ~ Cell_Number, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Mito_0
+
+Lin_mod_Mito_1 <- lm(MitoConnected ~ Cell_Number + NewPools, data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Mito_1
+
+summary(Lin_mod_Mito_1)
+
+Lin_mod_Mito_2 <- lm(MitoConnected ~ Cell_Number + relevel(NewPools, ref="PVM"), data=subset(Morphologic, Fiber_Type=="Oxidative"))
+Lin_mod_Mito_2
+
+summary(Lin_mod_Mito_2)
+
+tapply(Morphologic$MitoConnected, list(Morphologic$Fiber_Type, Morphologic$NewPools), mean, na.rm=TRUE)
+tapply(Morphologic$MitoConnected, list(Morphologic$Fiber_Type, Morphologic$NewPools), sd, na.rm=TRUE)
+
+tapply(Morphologic$MitoConnected, Morphologic$Cell_Number, mean, na.rm=TRUE)
+tapply(Morphologic$MitoConnected, Morphologic$Cell_Number, sd, na.rm=TRUE)
+
+######Full cell connectomics##############
+#LipidConnect
+tapply(Morphologic$LipidLogNum, list(Morphologic$Fiber_Type, Morphologic$NewPools), mean, na.rm=TRUE)
+tapply(Morphologic$LipidLogNum, list(Morphologic$Fiber_Type, Morphologic$NewPools), sd, na.rm=TRUE)
+tapply(Morphologic$LipidLogNum, list(Morphologic$Cell_Number, Morphologic$NewPools), mean, na.rm=TRUE)
+
+#SRConnect
+tapply(Morphologic$SRLogNum, list(Morphologic$Fiber_Type, Morphologic$NewPools), mean, na.rm=TRUE)
+tapply(Morphologic$SRLogNum, list(Morphologic$Fiber_Type, Morphologic$NewPools), sd, na.rm=TRUE)
+tapply(Morphologic$SRLogNum, list(Morphologic$Cell_Number, Morphologic$NewPools), mean, na.rm=TRUE)
+
+#MitoConnect
+tapply(Morphologic$MitoLogNum, list(Morphologic$Fiber_Type, Morphologic$NewPools), mean, na.rm=TRUE)
+tapply(Morphologic$MitoLogNum, list(Morphologic$Fiber_Type, Morphologic$NewPools), sd, na.rm=TRUE)
+tapply(Morphologic$MitoLogNum, list(Morphologic$Cell_Number, Morphologic$NewPools), mean, na.rm=TRUE)
+
+#SLConnect
+tapply(Morphologic$SLLogNum, list(Morphologic$Fiber_Type, Morphologic$NewPools), mean, na.rm=TRUE)
+tapply(Morphologic$SLLogNum, list(Morphologic$Fiber_Type, Morphologic$NewPools), sd, na.rm=TRUE)
+tapply(Morphologic$SLLogNum, list(Morphologic$Cell_Number, Morphologic$NewPools), mean, na.rm=TRUE)
+
+#MyosinConnect
+tapply(Morphologic$MyosinLogNum, list(Morphologic$Fiber_Type, Morphologic$NewPools), mean, na.rm=TRUE)
+tapply(Morphologic$MyosinLogNum, list(Morphologic$Fiber_Type, Morphologic$NewPools), sd, na.rm=TRUE)
+tapply(Morphologic$MyosinLogNum, list(Morphologic$Cell_Number, Morphologic$NewPools), mean, na.rm=TRUE)
+
+#MLMModels
+MorphologicCell <- readxl::read_excel("C:/Users/parryha/Desktop/Subcellular measurements/Final Analysis_Kevin/Morphology_New_Analysis.xlsx",
+                                      sheet = "CellMeansMax", col_types="numeric")
+View(MorphologicCell)
+
+## Clean data
+
+MorphologicCell <- within(MorphologicCell, {
+  Cell = as.factor(Cell)
+  Fiber_Type = factor(Fiber_Type, labels = c("Glycolytic", "Oxidative"))
+  NewPools = factor(NewPools, labels = c("IFM", "PVM", "SSM"))
+  Lipid = as.numeric(Lipid)
+  LipidPer = as.numeric(LipidPer)
+  SR = as.numeric(SR)
+  SRPer = as.numeric(SRPer)
+  Mito = as.numeric(Mito)
+  MitoPer = as.numeric(MitoPer)
+  SL = as.numeric(SL)
+  SLPer = as.numeric(SLPer)
+  Myosin = as.numeric(Myosin)
+  MyosinPer = as.numeric(MyosinPer)
+  Accuracy = as.numeric(Accuracy)
+  FalseNegative = as.numeric(FalseNegative)
+  FalsePositive = as.numeric(FalsePositive)
+  AccuracySL = as.numeric(AccuracySL)
+  FalsePositiveSL = as.numeric(FalsePositiveSL)
+})
+
+#ViewData
+LipidCell <- ggplot()+
+  #geom_bar(data = subset(MorphologicCell, Fiber_Type=="Oxidative"), aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=LipidPer, fill= "grey"),
+  #             position="dodge", stat = "summary", width = 0.5, fun = "mean") +
+  geom_jitter(data = subset(MorphologicCell, Fiber_Type=="Oxidative"), aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=LipidPer, fill=NewPools, shape=Cell),
+              size = 10, width = 0.05, height = 0.05) +
+  ggplot2::scale_shape_manual(values=c(22,21,24,22,21,24,4,5,6))+
+  ggplot2::scale_fill_manual(values=c("coral1", "cornflowerblue", "chartreuse4")) +
+  #geom_jitter(width=0.05, height = 0.05, size = 10)+
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 55, hjust = 0.5),
+    legend.position = "none",
+    text = element_text(size = 45, color="black"),
+    axis.title.x=element_blank(),
+    axis.text.x=element_text(size=45, face="bold"),
+    axis.text.y=element_text(size=45)) +
+  labs(title = "Mitochondria-Lipid Connection", y = expression(paste("Mito-Lipid Connection (%)"))) +
+  facet_wrap(~Fiber_Type) +
+  theme(panel.spacing.x = unit(0, "lines")) + 
+  ylim(-5,105)
+
+LipidCellLines <- dplyr::tibble(
+  Fiber_Type = c("Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 1.0, 2.0),
+  xend = c(2.0, 3.0, 3.0),
+  y = c(80, 90, 80),
+  yend = y
+)
+
+LipidCellVertLines <- dplyr::tibble(
+  Fiber_Type = c("Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 2.0, 1.0, 3.0, 2.0, 3.0),
+  xend = x,
+  y =    c(78,   78,    88,  88,   78,    78),
+  yend = c(80.1, 80.1, 90.1, 90.1, 80.1, 80.1)
+)
+
+LipidCellStars <- dplyr::tibble(
+  Fiber_Type = c("Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.5, 2.0, 2.5),
+  y = c(85,  95,  85),
+  label = c("NS", "NS", "NS")
+)
+
+LipidCell + 
+  geom_segment(data = LipidCellLines, aes(x=x, xend=xend, y=y, yend=yend), size=2, inherit.aes = FALSE) + 
+  geom_segment(data = LipidCellVertLines, aes(x=x, xend=xend, y=y, yend=yend), size = 2, inherit.aes = FALSE) +
+  geom_text(data=LipidCellStars, aes(x=x, y=y, label=label), size=12, inherit.aes=FALSE) +
+  stat_summary(aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=LipidPer,
+                   shape = Cell, color = NewPools, group = NewPools), 
+               data = subset(MorphologicCell, Fiber_Type=="Oxidative"), 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='pointrange', 
+               size=0.75,
+               linewidth = 1,
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill="white")  
+
+
+SRCell <- ggplot()+
+  #geom_bar(data = MorphologicCell, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=SRPer, fill= "grey"),
+  #         position="dodge", stat = "summary", width = 0.5, fun = "mean") +
+  geom_jitter(data = MorphologicCell, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=SRPer, fill=NewPools, shape=Cell),
+              size = 10, width = 0.05, height = 0.05) +
+  ggplot2::scale_shape_manual(values=c(22,21,24,22,21,24,4,5,6))+
+  ggplot2::scale_fill_manual(values=c("coral1", "cornflowerblue", "chartreuse4")) +
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 55, hjust = 0.5),
+    legend.position = "none",
+    text = element_text(size = 45, color="black"),
+    axis.title.x=element_blank(),
+    axis.text.x=element_text(size=45, face="bold"),
+    axis.text.y=element_text(size=45)) +
+  labs(title = "Mitochondria-SR Connection", y = expression(paste("Mito-SR Connection(%)"))) +
+  facet_wrap(~Fiber_Type) +
+  theme(panel.spacing.x = unit(0, "lines")) + 
+  ylim(0,140) +
+  scale_y_continuous(limits=c(0,140), breaks=c(0,25,50,75,100))
+
+SRCellLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 1.0, 1.0, 1.0, 2.0, 0.0),
+  xend = c(2.0, 4.0, 2.0, 3.0, 3.0, 3.0),
+  y = c(115, 135, 115, 125, 115, 135),
+  yend = y
+)
+
+SRCellVertLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 2.0, 1.0, 3.0, 2.0, 3.0, 1.0, 2.0, 3.0),
+  xend = x,
+  y =    c(113,    113,    133,   133,   133,   113,   113,   123,   123,   113,   113,   133,   133,   133),
+  yend = c(115.1,  115.1,  135.1, 135.1, 135.1, 115.1, 115.1, 125.1, 125.1, 115.1, 115.1, 135.1, 135.1, 135.1)
+)
+
+SRCellStars <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.5, 4.0, 1.5, 2.0, 2.5, 0.0),
+  y = c(120, 140, 120, 130, 120, 140),
+  label = c("NS", "NS",  "NS", "NS", "NS", "NS")
+)
+
+SRCell + 
+  geom_segment(data = SRCellLines, aes(x=x, xend=xend, y=y, yend=yend), size=2, inherit.aes = FALSE) + 
+  geom_segment(data = SRCellVertLines, aes(x=x, xend=xend, y=y, yend=yend), size = 2, inherit.aes = FALSE) +
+  geom_text(data=SRCellStars, aes(x=x, y=y, label=label), size=10, inherit.aes=FALSE) +
+  stat_summary(aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=SRPer,
+                   shape = Cell, color = NewPools, group = NewPools), 
+               data = MorphologicCell, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='pointrange', 
+               size=0.75,
+               linewidth = 1,
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill="white")  
+
+
+MitoCell <- ggplot()+
+  #geom_bar(data = MorphologicCell, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=MitoPer, fill= "grey"),
+  #                   position="dodge", stat = "summary", width = 0.5, fun = "mean") +
+  geom_jitter(data = MorphologicCell, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=MitoPer, fill=NewPools, shape=Cell),
+              size = 10, width = 0.05, height = 0.05) +
+  ggplot2::scale_shape_manual(values=c(22,21,24,22,21,24,4,5,6))+
+  ggplot2::scale_fill_manual(values=c("coral1", "cornflowerblue", "chartreuse4")) +
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 53, hjust = 0.5),
+    legend.position = "none",
+    text = element_text(size = 45, color="black"),
+    axis.title.x=element_blank(),
+    axis.text.x=element_text(size=45, face="bold"),
+    axis.text.y=element_text(size=45)) +
+  labs(title = "Mitochondria-Mitochondria Connection", y = expression(paste("Mito-Mito Connection(%)"))) +
+  facet_wrap(~Fiber_Type) +
+  theme(panel.spacing.x = unit(0, "lines")) + 
+  scale_y_continuous(limits=c(0,150), breaks=c(0,25,50,75,100))
+
+MitoCellLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 1.0, 1.0, 1.0, 2.0, 0.0),
+  xend = c(2.0, 4.0, 2.0, 3.0, 3.0, 3.0),
+  y = c(115, 138, 115, 125, 115, 138),
+  yend = y
+)
+
+MitoCellVertLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 2.0, 1.0, 3.0, 2.0, 3.0, 1.0, 2.0, 3.0),
+  xend = x,
+  y =    c(113,   113,   136,   136,   136,   113,   113,   123,   123,   113,   113,   136,   136,   136),
+  yend = c(115.1, 115.1, 138.1, 138.1, 138.1, 115.1, 115.1, 125.1, 125.1, 115.1, 115.1, 138.1, 138.1, 138.1)
+)
+
+MitoCellStars <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.5, 4.0, 1.5, 2.0, 2.5, 0.0),
+  y = c(120, 145, 120, 130, 120, 145),
+  label = c("NS", "*",  "NS", "NS", "NS", "*")
+)
+
+MitoCell + 
+  geom_segment(data = MitoCellLines, aes(x=x, xend=xend, y=y, yend=yend), size=2, inherit.aes = FALSE) + 
+  geom_segment(data = MitoCellVertLines, aes(x=x, xend=xend, y=y, yend=yend), size = 2, inherit.aes = FALSE) +
+  geom_text(data=MitoCellStars, aes(x=x, y=y, label=label), size=10, inherit.aes=FALSE) +
+  stat_summary(aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=MitoPer,
+                   shape = Cell, color = NewPools, group = NewPools), 
+               data = MorphologicCell, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='pointrange', 
+               size=0.75,
+               linewidth = 1,
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill="white")  
+
+
+SLCell <- ggplot()+
+  #geom_jitter(aes(shape = Cell, fill = Method), width=0.05, height = 0.05, size = 10)+
+  #geom_bar(data=MorphologicCell, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=SLPer, fill= "grey"),
+  #         position="dodge", stat = "summary", width = 0.5, fun = "mean") +
+  geom_jitter(data=MorphologicCell, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=SLPer, 
+                                        fill=NewPools, shape=Cell), size=10, width=0.05, height = 0.05)+
+  ggplot2::scale_shape_manual(values=c(22,21,24,22,21,24,4,5,6))+
+  ggplot2::scale_fill_manual(values=c("coral1", "cornflowerblue", "chartreuse4")) +
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 55, hjust = 0.5),
+    legend.position = "none",
+    text = element_text(size = 45, color="black"),
+    axis.title.x=element_blank(),
+    axis.text.x=element_text(size=45, face="bold"),
+    axis.text.y=element_text(size=45)) +
+  labs(title = "Mitochondria-Sarcolemma Connection", y = expression(paste("Mito-SL Connection(%)"))) +
+  facet_wrap(~Fiber_Type) +
+  theme(panel.spacing.x = unit(0, "lines")) + 
+  scale_y_continuous(limits=c(-5,135), breaks=c(0,25,50,75,100))
+
+SLLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 1.0, 1.0, 1.0, 2.0, 0.0),
+  xend = c(2.0, 4.0, 2.0, 3.0, 3.0, 3.0),
+  y = c(105, 125, 105, 115, 105, 125),
+  yend = y
+)
+
+SLVertLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 2.0, 1.0, 3.0, 2.0, 3.0, 1.0, 2.0, 3.0),
+  xend = x,
+  y =    c(102,   102,   122,   122,   122,   102,   102,   112,   112,   102,   102,   122,   122,   122),
+  yend = c(105.1, 105.1, 125.1, 125.1, 125.1, 105.1, 105.1, 115.1, 115.1, 105.1, 105.1, 125.1, 125.1, 125.1)
+)
+
+SLStars <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.5, 4.0, 1.5, 2.0, 2.5, 0.0),
+  y = c(107, 130, 107, 117, 107, 130),
+  label = c("***", "NS",  "***", "***", "***", "NS")
+)
+
+SLCell + 
+  geom_segment(data = SLLines, aes(x=x, xend=xend, y=y, yend=yend), size=2, inherit.aes = FALSE) + 
+  geom_segment(data = SLVertLines, aes(x=x, xend=xend, y=y, yend=yend), size = 2, inherit.aes = FALSE) +
+  geom_text(data=SLStars, aes(x=x, y=y, label=label), size=12, inherit.aes=FALSE) +
+  stat_summary(aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=SLPer,
+                   shape = Cell, color = NewPools, group = NewPools), 
+               data = MorphologicCell, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='pointrange', 
+               size=0.75,
+               linewidth = 1,
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill="white")  
+
+
+MyosinCell <-  ggplot()+
+  #geom_bar(data=MorphologicCell, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=MyosinPer, fill= "grey"),
+  #         position="dodge", stat = "summary", width = 0.5, fun = "mean") +
+  geom_jitter(data=MorphologicCell, aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=MyosinPer, 
+                                        fill=NewPools, shape=Cell), size=10, width = 0.05, height = 0.05)+
+  ggplot2::scale_shape_manual(values=c(22,21,24,22,21,24,4,5,6))+
+  ggplot2::scale_fill_manual(values=c("coral1", "cornflowerblue", "chartreuse4")) +
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 55, hjust = 0.5),
+    legend.position = "none",
+    text = element_text(size = 45, color="black"),
+    axis.title.x=element_blank(),
+    axis.text.x=element_text(size=45, face="bold"),
+    axis.text.y=element_text(size=45)) +
+  labs(title = "Mitochondria-Myosin Proximity", y = expression(paste("Mito-Myosin Connection(%)"))) +
+  facet_wrap(~Fiber_Type) +
+  theme(panel.spacing.x = unit(0, "lines")) + 
+  scale_y_continuous(limits=c(0,135), breaks=c(0,25,50,75,100))
+
+MyosinCellLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 1.0, 1.0, 1.0, 2.0, 0.0),
+  xend = c(2.0, 4.0, 2.0, 3.0, 3.0, 3.0),
+  y = c(105, 125, 105, 115, 105, 125),
+  yend = y
+)
+
+MyosinCellVertLines <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 2.0, 1.0, 3.0, 2.0, 3.0, 1.0, 2.0, 3.0),
+  xend = x,
+  y =    c(102,   102,   122,   122,   122,   102,   102,   112,   112,   102,   102,   122,   122,   122),
+  yend = c(105.1, 105.1, 125.1, 125.1, 125.1, 105.1, 105.1, 115.1, 115.1, 105.1, 105.1, 125.1, 125.1, 125.1)
+)
+
+MyosinCellStars <- dplyr::tibble(
+  Fiber_Type = c("Glycolytic", "Glycolytic",
+                 "Oxidative", "Oxidative", "Oxidative", "Oxidative"),
+  x = c(1.5, 4.0, 1.5, 2.0, 2.5, 0.0),
+  y = c(110, 130, 110, 117, 107, 130),
+  label = c("NS", "NS",  "NS", "***", "***", "NS")
+)
+
+MyosinCell + 
+  geom_segment(data = MyosinCellLines, aes(x=x, xend=xend, y=y, yend=yend), size=2, inherit.aes = FALSE) + 
+  geom_segment(data = MyosinCellVertLines, aes(x=x, xend=xend, y=y, yend=yend), size = 2, inherit.aes = FALSE) +
+  geom_text(data=MyosinCellStars, aes(x=x, y=y, label=label), size=12, inherit.aes=FALSE) +
+  stat_summary(aes(x=factor(NewPools, level=c('IFM', 'SSM', 'PVM')), y=MyosinPer,
+                   shape = Cell, color = NewPools, group = NewPools), 
+               data = MorphologicCell, 
+               fun.data=mean_sdl, 
+               fun.args=list(mult=1),
+               geom='pointrange', 
+               size=0.75,
+               linewidth = 1,
+               position = position_dodge(width = 0.2),
+               col="black",
+               fill="white")  
+
+#Stats only can run anova which is lm
+#Lipids
+Mod0_LipidCell <- lm(LipidPer ~ 1 ,data = MorphologicCell)
+Mod0_LipidCell
+
+Mod1_LipidCell <- lm(LipidPer ~ 1 + NewPools , data = MorphologicCell)
+Mod1_LipidCell
+
+#relevel
+Mod2.1_LipidCell <- lm(LipidPer ~ 1 + relevel(NewPools, ref="PVM"), data = MorphologicCell)
+Mod2.1_LipidCell
+
+screenreg(list(Mod0_LipidCell, Mod1_LipidCell, Mod2.1_LipidCell))
+
+#SR
+Mod0_SRCell <- lm(SRPer ~ 1 ,data = MorphologicCell)
+Mod0_SRCell
+
+Mod1_SRCell <- lm(SRPer ~ 1 + NewPools, data = MorphologicCell)
+Mod1_SRCell
+
+Mod2_SRCell <- lm(SRPer ~ 1 + NewPools + Fiber_Type, data = MorphologicCell)
+Mod2_SRCell
+
+#relevel
+Mod2.1_SRCell <- lm(SRPer ~ 1 + relevel(NewPools, ref="PVM") + Fiber_Type , data = MorphologicCell)
+Mod2.1_SRCell
+
+screenreg(list(Mod0_SRCell, Mod1_SRCell, Mod2_SRCell, Mod2.1_SRCell))
+
+#Mito
+Mod0_MitoCell <- lm(MitoPer ~ 1 ,data = MorphologicCell)
+Mod0_MitoCell
+
+Mod1_MitoCell <- lm(MitoPer ~ 1 + NewPools, data = MorphologicCell)
+Mod1_MitoCell
+
+Mod2_MitoCell <- lm(MitoPer ~ 1 + NewPools + Fiber_Type, data = MorphologicCell)
+Mod2_MitoCell
+
+#relevel
+Mod2.1_MitoCell <- lm(MitoPer ~ 1 + relevel(NewPools, ref="PVM") + Fiber_Type, data = MorphologicCell)
+Mod2.1_MitoCell
+
+screenreg(list(Mod0_MitoCell, Mod1_MitoCell, Mod2_MitoCell, Mod2.1_MitoCell))
+
+#SL
+Mod0_SLCell <- lm(SLPer ~ 1 ,data = MorphologicCell)
+Mod0_SLCell
+
+Mod1_SLCell <- lm(SLPer ~ 1 + NewPools, data = MorphologicCell)
+Mod1_SLCell
+
+Mod2_SLCell <- lm(SLPer ~ 1 + NewPools + Fiber_Type, data = MorphologicCell)
+Mod2_SLCell
+
+#relevel
+Mod2.1_SLCell <- lm(SLPer ~ 1 + relevel(NewPools, ref="PVM") + Fiber_Type, data = MorphologicCell)
+Mod2.1_SLCell
+
+screenreg(list(Mod0_SLCell, Mod1_SLCell, Mod2_SLCell, Mod2.1_SLCell))
+
+
+#Myosin
+Mod0_MyosinCell <- lm(MyosinPer ~ 1 ,data = MorphologicCell)
+Mod0_MyosinCell
+
+Mod1_MyosinCell <- lm(MyosinPer ~ 1 + NewPools, data = MorphologicCell)
+Mod1_MyosinCell
+
+Mod2_MyosinCell <- lm(MyosinPer ~ 1 + NewPools + Fiber_Type, data = MorphologicCell)
+Mod2_MyosinCell
+
+Mod3_MyosinCell <- lm(MyosinPer ~ 1+ NewPools + Fiber_Type + NewPools:Fiber_Type, data = MorphologicCell)
+Mod3_MyosinCell
+
+#relevel
+Mod2.1_MyosinCell <- lm(MyosinPer ~ 1 + relevel(NewPools, ref="PVM") + Fiber_Type, data = MorphologicCell)
+Mod2.1_MyosinCell
+
+screenreg(list(Mod0_MyosinCell, Mod1_MyosinCell, Mod2_MyosinCell, Mod2.1_MyosinCell, Mod3_MyosinCell))
+
+
+############### Mito Membrane Potential Data ###################
+
+
+## Load data Function
+
+TMRM <- read_excel("C:/Users/parryha/Desktop/Subcellular measurements/Final Analysis_Kevin/New_new_Functional_Paired_Analysis.xlsx", 
+                                            sheet = "TMRM_Three groups")
+View(TMRM)
+
+TMRM <- New_new_Functional_Paired_Analysis
+
+## Clean data
+
+TMRM <- within(TMRM, {
+  Mouse = factor(Mouse)
+  Fiber = factor(Fiber)
+  Fiber_Type = factor(Fiber_Type, labels = c("Glycolytic","Oxidative"))
+  Pair = factor(Pair)
+  Pool = factor(Pool, labels = c("IMF","PVM", "SSL"))
+  MTG = as.numeric(MTG)
+  TMRM = as.numeric(TMRM)
+  Ratio = as.numeric(TMRM/MTG)
+  
+})
+
+
+## Visualize Data
+
+#Setting theme in ggplot for scatter plot
+theme_set(
+  theme_minimal() +
+    theme(legend.position = "top")
+)
+
+
+## TMRM/MTG normalization check
+
+# TMRM and MTG
+TMRM_MTG <- ggplot(TMRM, aes(x=MTG, y=TMRM)) +
+  geom_point() +
+  geom_smooth(method = "lm") 
+#  coord_cartesian(xlim=c(0,90),ylim=c(0,90))
+TMRM_MTG
+
+summary(lm(TMRM$TMRM~TMRM$MTG))
+
+
+# TMRM and Ratio
+MTG_Ratio <- ggplot(TMRM, aes(x=MTG, y=Ratio)) +
+  geom_point() +
+  geom_smooth(method = "lm") 
+MTG_Ratio
+
+summary(lm(TMRM$Ratio~TMRM$MTG))
+cor(TMRM$Ratio,TMRM$MTG)
+
+# There is still a relationship leftover after normlaization and the intercept
+  # very much not zero. In a bivariate regression, the intercept p value will equal the 
+  # p value difference in a model comparison between the model and a zero-fixed intercept model
+
+
+##Boxplot made by KAG
+# Boxplot by Subcellular Pools
+
+
+############TMRM Statistics
+Mod0_TMRM <- lmer(TMRM ~ 1 + (1|Fiber), data = TMRM, REML = FALSE)
+summary(Mod0_TMRM)
+
+Mod1_TMRM <- lmer(TMRM ~ MTG + (1|Fiber), data = TMRM, REML = FALSE)
+summary(Mod1_TMRM)
+
+Mod1.1_TMRM <- lmer(TMRM ~ MTG + Pool + (1|Fiber), data = TMRM, REML = FALSE)
+summary(Mod1.1_TMRM)
+
+
+screenreg(list(Mod0_TMRM, Mod1_TMRM, Mod1.1_TMRM))
+
+
+#Add level 2 mouse
+
+Mod2_TMRM <- lmer(TMRM ~ MTG + Mouse + (1|Fiber), data = TMRM, REML = FALSE)
+summary(Mod2_TMRM)
+
+Mod2.1_TMRM <- lmer(TMRM ~ MTG + Mouse + Pool + (1|Fiber), data = TMRM, REML = FALSE)
+summary(Mod2.1_TMRM)
+
+screenreg(list(Mod1.1_TMRM, Mod2_TMRM, Mod2.1_TMRM))
+#mouse and pool significant.
+
+Mod3_TMRM <- lmer(TMRM ~ MTG + Mouse + Pool + Mouse*Pool + (1|Fiber), data = TMRM, REML = FALSE)
+summary(Mod3_TMRM)
+
+screenreg(list(Mod1.1_TMRM, Mod2_TMRM, Mod2.1_TMRM, Mod3_TMRM))
+
+#relevel
+Mod2.1.1_TMRM <- lmer(TMRM ~ MTG + Mouse + relevel(Pool, ref="PVM") + (1|Fiber), data = TMRM, REML = FALSE)
+Mod2.1.1_TMRM
+
+screenreg(list(Mod1.1_TMRM, Mod2_TMRM, Mod2.1_TMRM, Mod2.1.1_TMRM))
+
+#PVM > IMF, SSM = IFM
+
+tapply(TMRM$TMRM, TMRM$Pool, mean, na.rm=TRUE)
+tapply(TMRM$TMRM, TMRM$Pool, sd, na.rm=TRUE)
+
+#############################   Mito RACE   ################################
+
+RACE <- read_excel("C:/Users/parryha/Desktop/Subcellular measurements/Final Analysis_Kevin/New_new_Functional_Paired_Analysis.xlsx", 
+                   sheet = "MitoRACE Three groups")
+View(RACE)
+
+
+## Clean data
+
+Race <- within(RACE, {
+  Mouse = factor(Mouse)
+  Fiber = factor(Fiber)
+  Fiber_Type = factor(Fiber_Type)
+  Pool = factor(Pool, labels = c("IFM","PVM", "SSLM"))
+  NADH_FLUX = as.numeric(NADH_FLUX)
+  BASAL_NADH = as.numeric(BASAL_NADH)
+})
+
+
+### Visualize Data
+
+## Box plots for basal nadh redox
+
+# Basal NADH Redox
+BasalPlot <- ggplot(Race, aes(Pool, BASAL_NADH)) + #, fill = Type_of_Mito)) +
+  geom_boxplot(width = .6, lwd = 1.1, alpha = .6) +
+  geom_jitter(width = .15, color=factor(as.numeric(Race$Fiber_Type)),shape=factor(as.numeric(Race$Pool))) +
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 16, hjust = 0.5),
+    legend.position = "bottom",
+    text = element_text(family = 'Arial',size = 14)
+  ) +
+  labs(title = "Basal NADH Redoxby Mito Pool", y = "Basal NADH", x = "Subcellular_Pools")
+BasalPlot
+
+#NADH Flux
+FluxPlot <- ggplot(Race, aes(Pool, NADH_FLUX)) + #, fill = Type_of_Mito)) +
+  geom_boxplot(width = .6, lwd = 1.1, alpha = .6) +
+  geom_jitter(width = .15, color=factor(as.numeric(Race$Fiber_Type)),shape=factor(as.numeric(Race$Pool))) +
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 16, hjust = 0.5),
+    legend.position = "bottom",
+    text = element_text(family = 'Arial',size = 14)
+  ) +
+  labs(title = "Flux Rate by Mito Pool", y = "Flux Rate", x = "Subcellular_Pools")
+FluxPlot
+
+## Scatter plot NADH flux
+RacePlot <- ggplot(Race, aes(x=Pool, y=NADH_FLUX)) +
+  geom_point(color=factor(as.numeric(Race$Fiber_Type)),shape=factor(as.numeric(Race$Pool)))+
+  geom_smooth(method = "lm")
+RacePlot
+# Change color and shapes by groups (Type of Mito)
+RacePlot + geom_point(aes(color = Pool, shape = Pool))+
+  geom_smooth(aes(color = Pool, fill = Pool), method = "lm")+
+  geom_rug(aes(color = Pool))
+
+### Statistical Analysis
+
+## Basal
+
+Mod0_Basal <- lmer(BASAL_NADH ~ 1 + (1|Fiber), data = Race, REML = FALSE)
+summary(Mod0_Basal)
+
+Mod1_Basal <- lmer(BASAL_NADH ~ Pool + (1|Fiber), data = Race, REML=FALSE)
+summary(Mod1_Basal)
+
+Mod1.1_Basal <- lmer(BASAL_NADH ~ relevel(Pool, ref="PVM") + (1|Fiber), data = Race, REML=FALSE)
+summary(Mod1.1_Basal)
+
+screenreg(list(Mod0_Basal,Mod1_Basal, Mod1.1_Basal))
+
+# PM did help model and was significant
+
+# Adding mouse
+Mod2_Basal <- lmer(BASAL_NADH ~ Mouse + (1|Fiber), data = Race, REML = FALSE)
+summary(Mod2_Basal)
+
+Mod2.2_Basal <- lmer(BASAL_NADH ~ Mouse + Pool + (1|Fiber), data = Race, REML = FALSE)
+summary(Mod2.2_Basal)
+
+Mod2.3_Basal <- lmer(BASAL_NADH ~ Mouse + relevel(Pool, ref="PVM") + (1|Fiber), data = Race, REML = FALSE)
+summary(Mod2.3_Basal)
+
+screenreg(list(Mod0_Basal,Mod2_Basal,Mod2.2_Basal, Mod2.3_Basal))
+#Mouse did help model. significant and negative effect
+
+# mouse did matter in this sample. PVM and SLLM lower than IMF and SSLM higher than PVM.
+
+htmlreg(list(Mod0_Basal,Mod2_Basal,Mod2.2_Basal, Mod2.3_Basal), 
+        file = "RACEBasal.doc", doctype = TRUE,
+        html.tag = TRUE,
+        head.tag = TRUE,
+        body.tag = TRUE,
+        custom.model.names =  c("Intercept","Mouse","Mouse + Pools",
+                                "Mouse + Pools releveled"),
+        caption = "Basal Comparison", 
+        ci.force = FALSE, star.symbol = "*", custom.note = "PVM and SLLM lower than IMF and SSLM higher than PVM")
+
+tapply(RACE$BASAL_NADH, Race$Pool, mean, na.rm=TRUE)
+tapply(RACE$BASAL_NADH, Race$Pool, sd, na.rm=TRUE)
+
+
+## Flux
+
+Mod0_Flux <- lmer(NADH_FLUX ~ 1 + (1|Fiber), data = Race, REML = FALSE)
+summary(Mod0_Flux)
+
+Mod1.1_Flux <- lmer(NADH_FLUX ~ Pool + (1|Fiber), data = Race, REML = FALSE)
+summary(Mod1.1_Flux)
+
+Mod1.2_Flux <- lmer(NADH_FLUX ~ relevel(Pool, ref="PVM") + (1|Fiber), data = Race, REML = FALSE)
+summary(Mod1.1_Flux)
+
+Mod1.3_Flux <- lmer(NADH_FLUX ~ BASAL_NADH + (1|Fiber), data = Race, REML = FALSE)
+summary(Mod1.3_Flux)
+
+Mod1.4_Flux <- lmer(NADH_FLUX ~ Pool + BASAL_NADH + (1|Fiber), data = Race, REML = FALSE)
+summary(Mod1.4_Flux)
+
+screenreg(list(Mod0_Flux,Mod1.1_Flux,Mod1.3_Flux,Mod1.4_Flux))
+
+# Poolsmatter. PM slightly higher. Including NADH Redox made worse
+
+# Adding mouse
+
+Mod2_Flux <- lmer(NADH_FLUX ~ Mouse + (1|Fiber), data = Race, REML = FALSE)
+summary(Mod2_Flux)
+
+
+Mod2.2_Flux <- lmer(NADH_FLUX ~ Mouse + Pool + (1|Fiber), data = Race, REML = FALSE)
+summary(Mod2.2_Flux)
+
+
+Mod2.4_Flux <- lmer(NADH_FLUX ~ Mouse + Pool + BASAL_NADH + (1|Fiber), data = Race, REML = FALSE)
+summary(Mod2.4_Flux)
+
+screenreg(list(Mod0_Flux,Mod1.1_Flux, Mod1.2_Flux, Mod2_Flux, Mod2.2_Flux, Mod2.4_Flux))
+
+# Basal and mouse don't seem to help
+
+screenreg(list(Mod0_Flux,Mod1.1_Flux,Mod1.2_Flux,Mod2.2_Flux))
+
+# including pool was best
+
+htmlreg(list(Mod0_Flux,Mod1.1_Flux,Mod1.2_Flux,Mod2.2_Flux), 
+        file = "RACEflux_HP_6-22-2022.doc", doctype = TRUE,
+        html.tag = TRUE,
+        head.tag = TRUE,
+        body.tag = TRUE,
+        custom.model.names =  c("Intercept","Pools","Pools releveld",
+                                "Pools + Mouse"),
+        caption = "Flux Comparison", 
+        ci.force = FALSE, star.symbol = "*", custom.note = "Fiber type and mito pool (2)
+        made the best model without mouse and basal")
+
+tapply(RACE$NADH_FLUX, Race$Pool, mean, na.rm=TRUE)
+tapply(RACE$NADH_FLUX, Race$Pool, sd, na.rm=TRUE)
+
+
+###########################Tq-FLITS Calcium Data#########################
+
+Calcium <- readxl::read_excel("C:/Users/parryha/Desktop/Subcellular measurements/TqFLITS All Data.xlsx",
+                                  sheet = "Good data no low lifetime")
+View(Calcium)
+
+Calcium <- within(Calcium, {
+  Mouse = as.factor(Mouse)
+  Fiber = as.factor(Fiber)
+  ROI = as.factor(ROI)
+  MitoPool = factor(MitoPool,labels = c("IFM","PVM", "SSM"))
+  Lifetime = as.numeric(Lifetime)
+  Chisquare = as.numeric(Chisquare)
+  CalciumConcentrationuM = as.numeric(CalciumConcentrationuM)
+})
+
+##Visualize data via boxplot
+
+CalciumPlot <- ggplot(Calcium, aes(x=MitoPool, y=Lifetime, fill=Mouse, color=Mouse)) +
+  geom_boxplot(width = .6, lwd = 1.1, alpha = .6) +
+  geom_jitter(width = .15, color = factor(as.numeric(Calcium$MitoPool))) +
+  geom_line(aes(group= MitoPool), color="grey") +
+  theme_classic() +
+  theme(
+    plot.title = element_text(face="bold", size = 16, hjust = 0.5),
+    legend.position = "bottom",
+    text = element_text(family = 'Arial',size = 14)
+  ) +
+  labs(title = "Subcellular Calcium Levels", y = "Lifetime (ns)", x = "Subcellular_Pools")
+
+CalciumPlot
+
+##Analysis
+Mod0_Calcium <- lmer(Lifetime ~ 1 + (1|Fiber), data = Calcium, REML = FALSE)
+summary(Mod0_Calcium)
+
+Mod1_Calcium <- lmer(Lifetime ~ MitoPool + (1|Fiber), data = Calcium, REML = FALSE)
+summary(Mod1_Calcium)
+
+Mod1.1_Calcium <- lmer(Lifetime ~ relevel(MitoPool, ref = "PVM") + (1|Fiber), data = Calcium, REML = FALSE)
+summary(Mod1.1_Calcium)
+
+
+screenreg(list(Mod0_Calcium, Mod1_Calcium, Mod1.1_Calcium))
+
+#Add in mouse
+Mod2_Calcium <- lmer(Lifetime ~ Mouse + (1|Fiber), data = Calcium, REML = FALSE)
+summary(Mod1_Calcium)
+
+Mod2.1_Calcium <- lmer(Lifetime ~ Mouse + MitoPool + (1|Fiber), data = Calcium, REML = FALSE)
+summary(Mod2.1_Calcium)
+
+Mod2.1.1_Calcium <- lmer(Lifetime ~ Mouse + relevel(MitoPool, ref = "PVM") + (1|Fiber), data = Calcium, REML = FALSE)
+summary(Mod2.1.1_Calcium)
+
+screenreg(list(Mod0_Calcium, Mod2_Calcium, Mod2.1_Calcium, Mod2.1.1_Calcium))
+#Mouse did not help model. Best model is level 1
+
+htmlreg(list(Mod0_Calcium, Mod1_Calcium, Mod1.1_Calcium), 
+        file = "Calcium_HP_1-27-2023.doc", doctype = TRUE,
+        html.tag = TRUE,
+        head.tag = TRUE,
+        body.tag = TRUE,
+        custom.model.names =  c("Intercept","Pools","Pools releveld"),
+        caption = "Flux Comparison", 
+        ci.force = FALSE, star.symbol = "*", custom.note = "Best model with MitoPools")
+
+tapply(Calcium$Lifetime, Calcium$MitoPool, mean, na.rm=TRUE)
+tapply(Calcium$Lifetime, Calcium$MitoPool, sd, na.rm=TRUE)
+
+#Statistically higher calcium in SSM. The difference is so minimal, biologically is this meaningful?
+
